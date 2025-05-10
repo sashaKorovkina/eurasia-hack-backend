@@ -2,5 +2,5 @@ steps:
 - name: 'echo'
   command: ['echo', 'Hello, Cloud Build!']
 options:
+  logging: CLOUD_LOGGING_ONLY
   serviceAccount: '373909085987-compute@developer.gserviceaccount.com'
-  logsBucket: 'gs://eurasia-hack-logs'

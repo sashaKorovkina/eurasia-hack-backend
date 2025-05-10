@@ -2,6 +2,6 @@ steps:
 - name: 'bash'
   args: ['echo', 'Hello world!']
 logsBucket: 'eurasia-hack-logs'
-serviceAccount: 'projects/eurasia-hack/serviceAccounts/373909085987@cloudbuild.gserviceaccount.com'
+serviceAccount: 'projects/eurasia-hack/serviceAccounts/373909085987-compute@developer.gserviceaccount.com'
 options:
   logging: GCS_ONLY

@@ -4,11 +4,10 @@ from typing import List, Optional, Dict
 from ai_clients.gemini import GeminiClient
 import json
 
-# Retrieve all existing content from the website
-# 1. Get all text
-# 2. Get all urls
-# 3. Get all images
-# 4. The goal: re-create the product cards with all of the metadata
+"""
+Gets all existing product data 
+in JSON format.
+"""
 
 genai_client = GeminiClient()
 client = genai_client.get_client()

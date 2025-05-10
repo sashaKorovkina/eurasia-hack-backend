@@ -1,26 +1,33 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 import os
 
 from domain.scrape_content import *
 
 app = Flask(__name__)
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/', methods=['GET'])
 def enrich_site_data():
     message = "Catalog Attribute Enricher"
     service = os.environ.get('K_SERVICE', 'Unknown service')
     revision = os.environ.get('K_REVISION', 'Unknown revision')
 
-    product_raw_json = None
-    if request.method == 'POST':
-        product_url = request.form.get('website_url')
-        product_raw_json = reconcile_product(product_url)
-
     return render_template('index.html',
         message=message,
         Service=service,
-        Revision=revision,
-        product_raw_json=product_raw_json)
+        Revision=revision)
+
+
+@app.route('/get_product_data', methods=['POST'])
+def get_product_data():
+    """Gets data about a single product with URL as the input"""
+    data = request.get_json()
+    product_url = data.get('website_url')
+
+    if not product_url:
+        return jsonify({"error": "website_url is required"}), 400
+
+    product_raw_json = reconcile_product(product_url)
+    return jsonify(product_raw_json)
 
 
 if __name__ == '__main__':

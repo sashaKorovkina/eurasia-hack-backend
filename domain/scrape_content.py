@@ -3,6 +3,11 @@ from bs4 import BeautifulSoup
 from typing import List, Optional, Dict
 from ai_clients.gemini import GeminiClient
 import json
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from io import BytesIO
+from PIL import Image
+import base64
 
 """
 Gets all existing product data 
@@ -62,41 +67,35 @@ def extract_urls(url: str) -> Optional[List[Dict[str, List[str]]]]:
         return None
 
 
-def extract_images(url: str) -> Optional[List[Dict[str, str]]]:
+def take_screenshot(url: str) -> Optional[Image.Image]:
     try:
-        response = requests.get(url)
-        response.raise_for_status()
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        image_elements = soup.find_all('img')
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.get(url)
 
-        image_list = []
-        for image in image_elements:
-            img_url = image.get('src')
-            style = image.get('style', '')
+        screenshot_png = driver.get_screenshot_as_png()
+        driver.quit()
 
-            # Extract coordinates from the 'style' attribute if present (e.g., top, left)
-            coordinates = {}
-            if 'top' in style:
-                coordinates['top'] = style.split('top:')[1].split(';')[0].strip()
-            if 'left' in style:
-                coordinates['left'] = style.split('left:')[1].split(';')[0].strip()
+        image = Image.open(BytesIO(screenshot_png))
 
-            # Append the image URL and coordinates (if any)
-            if img_url:
-                image_data = {'element': 'img', 'src': img_url}
-                if coordinates:
-                    image_data['coordinates'] = coordinates
-                image_list.append(image_data)
+        image_response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                image,
+                "Describe each clothing item in the image in JSON format, including the colors, type of clothes and print if any."
+            ],
+        )
 
-        print(image_list)
-        return image_list
+        print(f'The image response is: {image_response.text}')
 
-    except requests.exceptions.RequestException as e:
-        print(f"Error downloading or processing {url}: {e}")
-        return None
+        return image_response.text
+
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        print(f"An error occurred while taking screenshot of {url}: {e}")
         return None
 
 
@@ -104,20 +103,19 @@ def reconcile_product(url):
 
     product_text = extract_text(url)
     product_urls = extract_urls(url)
-    # extract_images(url)
+    image_data = take_screenshot(url)
 
     ai_response = client.models.generate_content(
         model="gemini-2.0-flash",
         contents=[
             f"Write a structured JSON with all of the product attributes based on this data:"
-            f"{product_text} and the URLs: {product_urls}."
+            f"{product_text} and the URLs: {product_urls} and the images: {image_data}."
         ],
     )
     parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()
 
     try:
         json_output = json.loads(parsed_response)
-        print("Successfully got JSON Response!")
         return json_output
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON: {e}")

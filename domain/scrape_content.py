@@ -32,7 +32,7 @@ def extract_text(url: str) -> Optional[List[Dict[str, str]]]:
             if text:
                 text_list.append({'element': element.name, 'text': text})
 
-        print(text_list)
+        print(f'Text response is: {text_list}')
         return text_list
 
     except requests.exceptions.RequestException as e:
@@ -56,7 +56,7 @@ def extract_urls(url: str) -> Optional[List[Dict[str, List[str]]]]:
             href = element.get('href')
             if href:
                url_list.append({'element': element.name, 'urls': [href]})
-        print(url_list)
+        print(f'URL response is: {url_list}')
         return url_list
 
     except requests.exceptions.RequestException as e:
@@ -90,9 +90,9 @@ def take_screenshot(url: str) -> Optional[Image.Image]:
             ],
         )
 
-        print(f'The image response is: {image_response.text}')
+        print(f'Image response is: {image_response}')
 
-        return image_response.text
+        return image_response
 
     except Exception as e:
         print(f"An error occurred while taking screenshot of {url}: {e}")

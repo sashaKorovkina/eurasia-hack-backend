@@ -1,0 +1,25 @@
+name: Deploy to Google Cloud
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v0.3.0
+        with:
+          version: 'latest'
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          credentials: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Deploy to Google Cloud using Cloud Build
+        run: |
+          gcloud builds submit --config cloudbuild.yaml .

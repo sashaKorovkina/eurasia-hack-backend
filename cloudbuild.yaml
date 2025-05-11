@@ -1,19 +1,5 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/eurasia-hack/my-app:$SHORT_SHA', '.']
-
-  - name: 'gcr.io/cloud-builders/gcloud'
-    entrypoint: 'gcloud'
-    args:
-      - 'run'
-      - 'deploy'
-      - 'eurasia-hack'
-      - '--image'
-      - 'gcr.io/eurasia-hack/my-app:$SHORT_SHA'
-      - '--region'
-      - 'europe-west2'
-      - '--platform'
-      - 'managed'
-
+    args: ['build', '-t', 'gcr.io/eurasia-hack/my-app', '.']
 images:
-  - 'gcr.io/eurasia-hack/my-app:$SHORT_SHA'
+  - 'gcr.io/eurasia-hack/my-app'

@@ -1,14 +1,19 @@
-# Python image to use.
-FROM python:3.12-alpine
+FROM python:3.9-slim
 
-# Set the working directory to /app
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-driver \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROME_DRIVER=/usr/bin/chromedriver
+
 WORKDIR /app
 
-# copy the requirements file used for dependencies
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --trusted-host pypi.python.org -r requirements.txt
+EXPOSE 8080
 
 # Copy the rest of the working directory contents into the container at /app
 COPY . .

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import render_template, request, jsonify
 import os
 
 from domain.scrape_content import *
@@ -27,6 +27,19 @@ def get_product_data():
         return jsonify({"error": "website_url is required"}), 400
 
     product_raw_json = reconcile_product(product_url)
+    return jsonify(product_raw_json)
+
+
+@app.route('/get_image_data', methods=['POST'])
+def get_image_data():
+    """Gets data about a single product image with URL as the input"""
+    data = request.get_json()
+    image_url = data.get('website_url')
+
+    if not image_url:
+        return jsonify({"error": "website_url is required"}), 400
+
+    product_raw_json = get_product_image_data(image_url)
     return jsonify(product_raw_json)
 
 

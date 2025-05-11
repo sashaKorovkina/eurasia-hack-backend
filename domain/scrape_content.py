@@ -7,12 +7,12 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from io import BytesIO
 from PIL import Image
-import base64
+from selenium.webdriver.chrome.service import Service
+import logging
+from flask import Flask
 
-"""
-Gets all existing product data 
-in JSON format.
-"""
+app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
 
 genai_client = GeminiClient()
 client = genai_client.get_client()
@@ -32,7 +32,6 @@ def extract_text(url: str) -> Optional[List[Dict[str, str]]]:
             if text:
                 text_list.append({'element': element.name, 'text': text})
 
-        print(f'Text response is: {text_list}')
         return text_list
 
     except requests.exceptions.RequestException as e:
@@ -56,7 +55,7 @@ def extract_urls(url: str) -> Optional[List[Dict[str, List[str]]]]:
             href = element.get('href')
             if href:
                url_list.append({'element': element.name, 'urls': [href]})
-        print(f'URL response is: {url_list}')
+
         return url_list
 
     except requests.exceptions.RequestException as e:
@@ -69,12 +68,19 @@ def extract_urls(url: str) -> Optional[List[Dict[str, List[str]]]]:
 
 def take_screenshot(url: str) -> Optional[Image.Image]:
     try:
-        chrome_options = Options()
-        chrome_options.add_argument('--headless')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
+        logging.info(f"Accessing: {url}")
 
-        driver = webdriver.Chrome(options=chrome_options)
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--window-size=1920,1080")
+
+        # In Cloud Run, we often install chromium & chromedriver in /usr/bin
+        chrome_options.binary_location = "/usr/bin/chromium"
+        service = Service("/usr/bin/chromedriver")
+
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get(url)
 
         screenshot_png = driver.get_screenshot_as_png()
@@ -89,9 +95,6 @@ def take_screenshot(url: str) -> Optional[Image.Image]:
                 "Describe each clothing item in the image in JSON format, including the colors, type of clothes and print if any."
             ],
         )
-
-        print(f'Image response is: {image_response}')
-
         return image_response
 
     except Exception as e:
@@ -100,26 +103,53 @@ def take_screenshot(url: str) -> Optional[Image.Image]:
 
 
 def reconcile_product(url):
-
     product_text = extract_text(url)
-    product_urls = extract_urls(url)
-    image_data = take_screenshot(url)
+    if not product_text:
+        print("Failed to extract text.")
+        return None
 
-    ai_response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=[
-            f"Write a structured JSON with all of the product attributes based on this data:"
-            f"{product_text} and the URLs: {product_urls} and the images: {image_data}."
-        ],
-    )
-    parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()
+    product_urls = extract_urls(url)
+    if not product_urls:
+        print("Failed to extract URLs.")
+        return None
 
     try:
+        ai_response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                f"Write a structured JSON with all of the product attributes based on this data:"
+                f"{product_text} and the URLs: {product_urls}."
+            ],
+        )
+        parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()
         json_output = json.loads(parsed_response)
         return json_output
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON: {e}")
-        print(f"Problematic AI Response! Gemini Broke down.")
+
+    except Exception as e:
+        print(f"Error during AI processing or JSON decoding: {e}")
+        return None
+
+
+def get_product_image_data(url):
+    image_data = take_screenshot(url)
+    if not image_data:
+        print("Failed to take screenshot.")
+        return None
+
+    try:
+        ai_response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                f"Write a structured JSON with all of the product attributes based on this data"
+                f"images: {image_data}."
+            ],
+        )
+        parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()
+        json_output = json.loads(parsed_response)
+        return json_output
+
+    except Exception as e:
+        print(f"Error during AI processing or JSON decoding: {e}")
         return None
 
 

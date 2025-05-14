@@ -1,15 +1,20 @@
+import traceback
+
 import requests
 from bs4 import BeautifulSoup
 from typing import List, Optional, Dict
 from ai_clients.gemini import GeminiClient
 import json
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from io import BytesIO
 from PIL import Image
 from selenium.webdriver.chrome.service import Service
 import logging
 from flask import Flask
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -18,28 +23,35 @@ genai_client = GeminiClient()
 client = genai_client.get_client()
 
 
-def extract_text(url: str) -> Optional[List[Dict[str, str]]]:
+def extract_text(url: str) -> Optional[List[str]]:
     try:
-        response = requests.get(url)
-        response.raise_for_status()
+        logging.info(f"Accessing: {url}")
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--window-size=1920,1080")
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div'])
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.get(url)
 
-        text_list = []
-        for element in elements:
-            text = element.text.strip()
-            if text:
-                text_list.append({'element': element.name, 'text': text})
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
+
+        all_elements = driver.find_elements(By.XPATH, "//*[normalize-space(text())]")
+
+        text_list = list({elem.text.strip() for elem in all_elements if elem.text.strip()})
 
         return text_list
 
-    except requests.exceptions.RequestException as e:
-        print(f"Error downloading or processing {url}: {e}")
-        return None
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        traceback.print_exc()
         return None
+    finally:
+        if 'driver' in locals() and driver:
+            logging.info("Closing the browser driver.")
+            driver.quit()
 
 
 def extract_urls(url: str) -> Optional[List[Dict[str, List[str]]]]:
@@ -69,18 +81,13 @@ def extract_urls(url: str) -> Optional[List[Dict[str, List[str]]]]:
 def take_screenshot(url: str) -> Optional[Image.Image]:
     try:
         logging.info(f"Accessing: {url}")
-
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--window-size=1920,1080")
 
-        # In Cloud Run, we often install chromium & chromedriver in /usr/bin
-        chrome_options.binary_location = "/usr/bin/chromium"
-        service = Service("/usr/bin/chromedriver")
-
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver = webdriver.Chrome(options=chrome_options)
         driver.get(url)
 
         screenshot_png = driver.get_screenshot_as_png()
@@ -102,7 +109,7 @@ def take_screenshot(url: str) -> Optional[Image.Image]:
         return None
 
 
-def reconcile_product(url):
+def reconcile_product(url, user_prompt):
     product_text = extract_text(url)
     if not product_text:
         print("Failed to extract text.")
@@ -118,11 +125,13 @@ def reconcile_product(url):
             model="gemini-2.0-flash",
             contents=[
                 f"Write a structured JSON with all of the product attributes based on this data:"
+                f"focus they extracted data on the user's request: {user_prompt}"
                 f"{product_text} and the URLs: {product_urls}."
             ],
         )
         parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()
         json_output = json.loads(parsed_response)
+        logging.info('Executed user driven reconciliation')
         return json_output
 
     except Exception as e:
@@ -140,8 +149,34 @@ def get_product_image_data(url):
         ai_response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[
-                f"Write a structured JSON with all of the product attributes based on this data"
+                f"Write a structured JSON with all of the product attributes based on the image provided"
+                f"this JSON must comply to the best SEO practices. Also focus on the data which is not "
+                f"normally described on a product page of the website but which you can infer from the"
+                f"image."
                 f"images: {image_data}."
+            ],
+        )
+        parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()
+        json_output = json.loads(parsed_response)
+        logging.info('Executed SEO JSON')
+        return json_output
+
+    except Exception as e:
+        print(f"Error during AI processing or JSON decoding: {e}")
+        return None
+
+
+def export_json_ld(url, user_prompt):
+    product_text = extract_text(url)
+    product_urls = extract_urls(url)
+    image_data = take_screenshot(url)
+
+    try:
+        ai_response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                f"Write a structured JSON-LD for a website with all of the product attributes based on this data"
+                f"images: {image_data}, urls: {product_urls} and text: {product_text} ."
             ],
         )
         parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()

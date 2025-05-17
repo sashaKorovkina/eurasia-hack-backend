@@ -55,6 +55,7 @@ def json_ld_creator():
         return jsonify({"error": "website_url is required"}), 400
 
     product_raw_json = export_json_ld(product_url, user_prompt)
+    print(jsonify(product_raw_json))
     return jsonify(product_raw_json)
 
 

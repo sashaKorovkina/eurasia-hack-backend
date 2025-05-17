@@ -2,12 +2,12 @@ import traceback
 
 import requests
 from bs4 import BeautifulSoup
+import re
 from typing import List, Optional, Dict
 from ai_clients.gemini import GeminiClient
 import json
 from io import BytesIO
 from PIL import Image
-from selenium.webdriver.chrome.service import Service
 import logging
 from flask import Flask
 from selenium import webdriver
@@ -179,6 +179,30 @@ def export_json_ld(url, user_prompt):
                 f"images: {image_data}, urls: {product_urls} and text: {product_text} ."
             ],
         )
+        print(f'The AI response for JSON LD is: {ai_response.text}')
+        parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()
+        clean_text = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', parsed_response)
+        no_comma_text = re.sub(r',\s*([]})])', r'\1', clean_text)
+        json_output = json.loads(no_comma_text)
+        return json_output
+
+    except Exception as e:
+        print(f"Error during AI processing or JSON decoding: {e}")
+        return None
+
+def get_model_cost(text):
+    product_text = extract_text(url)
+    product_urls = extract_urls(url)
+    image_data = take_screenshot(url)
+
+    try:
+        ai_response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                f"Write a structured JSON-LD for a website with all of the product attributes based on this data"
+                f"images: {image_data}, urls: {product_urls} and text: {product_text} ."
+            ],
+        )
         parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()
         json_output = json.loads(parsed_response)
         return json_output
@@ -186,7 +210,6 @@ def export_json_ld(url, user_prompt):
     except Exception as e:
         print(f"Error during AI processing or JSON decoding: {e}")
         return None
-
 
 if __name__ == "__main__":
     url = "https://sashakorovkina2003.wixsite.com/my-site/product-page/i-m-a-product-15"

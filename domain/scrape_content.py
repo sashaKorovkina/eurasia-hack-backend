@@ -77,6 +77,56 @@ def extract_urls(url: str) -> Optional[List[Dict[str, List[str]]]]:
         print(f"An unexpected error occurred: {e}")
         return None
 
+# returns the url of the biggest image
+def fetch_biggest_image_url(url):
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        img_tags = soup.find_all('img')
+
+        largest_img = None
+        largest_area = 0
+
+        for img in img_tags:
+            src = img.get('src')
+            if not src:
+                continue
+
+            # Handle relative URLs
+            if src.startswith('//'):
+                src = 'https:' + src
+            elif src.startswith('/'):
+                src = requests.compat.urljoin(url, src)
+            elif not src.startswith('http'):
+                continue  # skip unsupported formats
+
+            try:
+                img_resp = requests.get(src, timeout=5)
+                img_resp.raise_for_status()
+                image = Image.open(BytesIO(img_resp.content))
+
+                width, height = image.size
+                area = width * height
+
+                if area > largest_area:
+                    largest_area = area
+                    largest_img = {
+                        'url': src,
+                        'width': width,
+                        'height': height
+                    }
+
+            except Exception as e:
+                # Skip bad images or broken links
+                continue
+
+        return largest_img.get('url')
+
+    except Exception as e:
+        print(f"Failed to fetch images from {url}: {e}")
+        return None
 
 def take_screenshot(url: str) -> Optional[Image.Image]:
     try:
@@ -170,13 +220,13 @@ def export_json_ld(url, user_prompt):
     product_text = extract_text(url)
     product_urls = extract_urls(url)
     image_data = take_screenshot(url)
-
+    biggest_image_url = fetch_biggest_image_url(url)
     try:
         ai_response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[
                 f"Write a structured JSON-LD for a website with all of the product attributes based on this data"
-                f"images: {image_data}, urls: {product_urls} and text: {product_text} ."
+                f"images: {image_data}, urls: {product_urls}, text: {product_text} and imageUrl: {biggest_image_url} . Make sure to include 'name', 'image', and 'offers' fields."
             ],
         )
         parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()

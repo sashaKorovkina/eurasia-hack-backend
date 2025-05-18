@@ -58,6 +58,19 @@ def json_ld_creator():
     print(jsonify(product_raw_json))
     return jsonify(product_raw_json)
 
+@app.route('/get_saved_model_cost', methods=['POST'])
+def compute_saved_model_cost():
+    """Gets data about a single product with URL as the input"""
+    data = request.get_json()
+    product_url = data.get('website_url')
+
+    if not product_url:
+        return jsonify({"error": "website_url is required"}), 400
+
+    saved_costs = get_saved_model_cost(product_url)
+    print(saved_costs)
+    return saved_costs
+
 
 if __name__ == '__main__':
     server_port = os.environ.get('PORT', '8080')

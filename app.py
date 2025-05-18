@@ -17,18 +17,18 @@ def enrich_site_data():
         Revision=revision)
 
 
-@app.route('/get_product_data', methods=['POST'])
-def get_product_data():
-    """Gets data about a single product with URL as the input"""
-    data = request.get_json()
-    product_url = data.get('website_url')
-    user_prompt = data.get('user_prompt')
-
-    if not product_url:
-        return jsonify({"error": "website_url is required"}), 400
-
-    product_raw_json = reconcile_product(product_url, user_prompt)
-    return jsonify(product_raw_json)
+# @app.route('/get_product_data', methods=['POST'])
+# def get_product_data():
+#     """Gets data about a single product with URL as the input"""
+#     data = request.get_json()
+#     product_url = data.get('website_url')
+#     user_prompt = data.get('user_prompt')
+#
+#     if not product_url:
+#         return jsonify({"error": "website_url is required"}), 400
+#
+#     product_text, product_urls = reconcile_product(product_url)
+#     return product_text, product_urls
 
 
 @app.route('/get_image_data', methods=['POST'])
@@ -67,7 +67,7 @@ def compute_saved_model_cost():
     if not product_url:
         return jsonify({"error": "website_url is required"}), 400
 
-    saved_costs = get_saved_model_cost(product_url)
+    saved_costs = get_model_cost(product_url)
     print(saved_costs)
     return saved_costs
 

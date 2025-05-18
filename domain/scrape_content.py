@@ -169,7 +169,7 @@ def take_screenshot(url: str) -> Optional[Image.Image]:
         return None
 
 
-def reconcile_product(url, user_prompt):
+def reconcile_product(url):
     product_text = extract_text(url)
     if not product_text:
         print("Failed to extract text.")
@@ -180,35 +180,37 @@ def reconcile_product(url, user_prompt):
         print("Failed to extract URLs.")
         return None
 
-    prompt = [
-        f"Write a structured JSON with all of the product attributes based on this data:"
-        f"focus they extracted data on the user's request: {user_prompt}"
-        f"{product_text} and the URLs: {product_urls}."
-    ]
-
-    try:
-
-        print(
-            "token count for product: ",
-            client.models.count_tokens(
-                model="gemini-2.0-flash", contents=[prompt]
-            )
-        )
-
-        ai_response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[
-                prompt
-            ],
-        )
-        parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()
-        json_output = json.loads(parsed_response)
-        logging.info('Executed user driven reconciliation')
-        return json_output
-
-    except Exception as e:
-        print(f"Error during AI processing or JSON decoding: {e}")
-        return None
+    return product_text, product_urls
+    #
+    # prompt = [
+    #     f"Write a structured JSON with all of the product attributes based on this data:"
+    #     f"focus they extracted data on the user's request: {user_prompt}"
+    #     f"{product_text} and the URLs: {product_urls}."
+    # ]
+    #
+    # try:
+    #
+    #     print(
+    #         "token count for product: ",
+    #         client.models.count_tokens(
+    #             model="gemini-2.0-flash", contents=[prompt]
+    #         )
+    #     )
+    #
+    #     ai_response = client.models.generate_content(
+    #         model="gemini-2.0-flash",
+    #         contents=[
+    #             prompt
+    #         ],
+    #     )
+    #     parsed_response = ai_response.text.replace("```json", "").replace("```", "").strip()
+    #     json_output = json.loads(parsed_response)
+    #     logging.info('Executed user driven reconciliation')
+    #     return json_output
+    #
+    # except Exception as e:
+    #     print(f"Error during AI processing or JSON decoding: {e}")
+    #     return None
 
 
 def get_product_image_data(url):
@@ -275,12 +277,43 @@ def export_json_ld(url, user_prompt):
         print(f"Error during AI processing or JSON decoding: {e}")
         return None
 
-def get_saved_model_cost(url):
+def compute_image_cost(url):
+    try:
+        logging.info(f"Accessing: {url}")
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--window-size=1920,1080")
+
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.get(url)
+
+        screenshot_png = driver.get_screenshot_as_png()
+        driver.quit()
+
+        image = Image.open(BytesIO(screenshot_png))
+        prompt = "Describe each clothing item in the image in JSON format, including the colors, type of clothes and print if any."
+
+        image_tokens_count = client.models.count_tokens(
+                model="gemini-2.0-flash", contents=[prompt, image]
+            ).total_tokens
+
+        print(
+            "token count with image: ",
+            image_tokens_count
+        )
+        return image_tokens_count
+    except Exception as e:
+        print(f"Error during computing costs of processing image: {e}")
+        return None
+
+def get_model_cost(url):
     product_text, product_html = extract_text(url)
     product_urls = extract_urls(url)
     image_data = take_screenshot(url)
     biggest_image_url = fetch_biggest_image_url(url)
-    pricePerToken = 0.0000001
+    price_per_token = 0.0000001
 
     prompt = [
         f"Write a structured JSON-LD for a website with all of the product attributes based on this data"
@@ -294,28 +327,34 @@ def get_saved_model_cost(url):
         f"Make sure to include 'name', 'image', and 'offers' fields."
     ]
     try:
-
+        image_tokens_count = compute_image_cost(url)
         clean_tokens_count = client.models.count_tokens(model="gemini-2.0-flash", contents=[prompt]).total_tokens
         dirty_tokens_count = client.models.count_tokens(model="gemini-2.0-flash", contents=[dirty_prompt]).total_tokens
         difference = dirty_tokens_count - clean_tokens_count
-        percentage_decrease = difference / dirty_tokens_count * 100
-        saved_money = difference * pricePerToken
+        saved_money = difference * price_per_token
+        total_tokens = image_tokens_count + clean_tokens_count
+        total_cost = total_tokens * price_per_token
+        percentage_decrease = difference / (difference + total_tokens) * 100
         print(
             f"Compressed prompt token count for json-ld: {clean_tokens_count}\n"
             f"Unprocessed prompt token count for json-ld: {dirty_tokens_count}\n"
             f"Difference: {difference}\n"
+            f"Total tokens: {total_tokens}\n"
             f"Saved money: ${saved_money}\n"
+            f"Total cost: ${total_cost}\n"
             f"Percentage decrease: {percentage_decrease}%"
         )
-        saved_costs_data = {
+        costs_data = {
             "Compressed prompt tokens": clean_tokens_count,
             "Unprocessed prompt tokens": dirty_tokens_count,
             "Difference": difference,
             "Saved money": saved_money,
             "Percentage decrease": percentage_decrease,
+            "Total tokens": total_tokens,
+            "Total cost": total_cost
         }
 
-        return saved_costs_data
+        return costs_data
 
     except Exception as e:
         print(f"Error during computing costs: {e}")

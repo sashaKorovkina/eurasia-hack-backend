@@ -19,7 +19,7 @@ Us in action:
 ![2025-05-18 12 26 18](https://github.com/user-attachments/assets/c4cd48ad-9b08-42f8-82a7-62c71cfe56e9)
 
 ---
-## Local Run Instructions
+Local Run Instructions
 
 ### 1. Install dependencies
 
